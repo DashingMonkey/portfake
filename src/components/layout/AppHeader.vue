@@ -39,10 +39,7 @@ async function toggleServer() {
     }
   } else {
     serverStore.port = settingsStore.serverPort
-    const origins = settingsStore.corsOrigins
-      .split(',')
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0)
+    const origins = settingsStore.parsedCorsOrigins
     try {
       await serverStore.startServer(origins.length > 0 ? origins : ['*'], tabsStore.drafts)
       showToast({ message: i18n.global.t('server.started', { port: serverStore.port }), type: 'success' })

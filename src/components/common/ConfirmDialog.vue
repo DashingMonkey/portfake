@@ -32,8 +32,13 @@ defineEmits<{
         v-if="visible"
         class="fixed inset-0 z-90 flex items-center justify-center bg-black/40 backdrop-blur-xs"
         @click.self="$emit('cancel')"
+        @keydown.esc="$emit('cancel')"
       >
-        <div class="w-[360px] bg-surface-base border border-border-default rounded-xl shadow-2xl overflow-hidden">
+        <div
+          role="dialog"
+          aria-modal="true"
+          class="w-[360px] bg-surface-base border border-border-default rounded-xl shadow-2xl overflow-hidden"
+        >
           <div class="px-5 py-4 border-b border-border-default flex items-center justify-between">
             <h2 class="text-sm font-semibold text-text-primary">{{ title }}</h2>
             <button

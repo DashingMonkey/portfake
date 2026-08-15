@@ -60,6 +60,9 @@ desktop.ini
 .trae/
 .playwright-mcp/
 
+# Batch scripts (local build helpers)
+*.bat
+
 # Temp files
 tmp/
 .temp/

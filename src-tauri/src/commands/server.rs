@@ -2,7 +2,6 @@ use crate::models::TempRequest;
 use crate::{lock_or_recover, AppState};
 use serde::Serialize;
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Serialize)]
 pub struct ServerStatus {
@@ -12,7 +11,7 @@ pub struct ServerStatus {
 
 #[tauri::command]
 pub async fn start_server(
-    state: tauri::State<'_, Mutex<AppState>>,
+    state: tauri::State<'_, AppState>,
     app_handle: tauri::AppHandle,
     port: u16,
     cors_origins: Vec<String>,
@@ -24,8 +23,8 @@ pub async fn start_server(
         log::warn!("Port {} is in the privileged range (0-1023), this may require admin/root privileges", port);
     }
 
-    // Build temp_requests map and clear old one
-    let temp_requests: HashMap<String, TempRequest> = drafts
+    // Build temp_requests map and store in shared Arc
+    let temp_requests_map: HashMap<String, TempRequest> = drafts
         .into_iter()
         .map(|draft| {
             let key = format!("{}:{}", draft.method.to_uppercase(), draft.path.trim_start_matches('/'));
@@ -34,41 +33,39 @@ pub async fn start_server(
         })
         .collect();
 
-    let temp_requests = Arc::new(Mutex::new(temp_requests));
-    let temp_requests_for_server = temp_requests.clone();
+    // Update the shared temp_requests Arc (same instance used by server)
+    {
+        let mut temp = lock_or_recover(&state.temp_requests);
+        *temp = temp_requests_map;
+    }
 
-    let db = {
-        let app_state = lock_or_recover(&state);
-        log::info!("Acquired app_state lock");
-
-        // Stop existing server if running
-        if let Some(tx) = app_state.shutdown_tx.lock().ok().and_then(|mut g| g.take()) {
+    // Stop existing server if running
+    let old_handle = {
+        if let Some(tx) = lock_or_recover(&state.shutdown_tx).take() {
             log::info!("Stopping existing server...");
             let _ = tx.send(());
         }
-        if let Some(handle) = app_state.server_handle.lock().ok().and_then(|mut g| g.take()) {
-            drop(handle);
-            log::info!("Dropped existing server handle");
-        }
-
-        // Update temp_requests in AppState
-        if let Ok(mut temp) = app_state.temp_requests.lock() {
-            *temp = temp_requests_for_server.lock().unwrap().clone();
-        }
-
-        log::info!("Cloned db and dropped app_state");
-        app_state.db.clone()
+        lock_or_recover(&state.server_handle).take()
     };
+
+    // Await old server to fully stop before rebinding (prevents port race)
+    if let Some(handle) = old_handle {
+        log::info!("Waiting for old server to stop...");
+        let _ = handle.await;
+        log::info!("Old server stopped");
+    }
+
+    let db = state.db.clone();
+    let temp_requests = state.temp_requests.clone();
 
     let (handle, shutdown_tx) =
         crate::server::start_mock_server(db, app_handle, port, cors_origins, temp_requests).await?;
     log::info!("start_mock_server returned successfully");
 
     {
-        let app_state = lock_or_recover(&state);
-        *lock_or_recover(&app_state.server_handle) = Some(handle);
-        *lock_or_recover(&app_state.shutdown_tx) = Some(shutdown_tx);
-        *lock_or_recover(&app_state.server_port) = port;
+        *lock_or_recover(&state.server_handle) = Some(handle);
+        *lock_or_recover(&state.shutdown_tx) = Some(shutdown_tx);
+        *lock_or_recover(&state.server_port) = port;
     }
 
     log::info!("Server started on port {}", port);
@@ -76,19 +73,19 @@ pub async fn start_server(
 }
 
 #[tauri::command]
-pub async fn stop_server(state: tauri::State<'_, Mutex<AppState>>) -> Result<(), String> {
-    let app_state = lock_or_recover(&state);
-
-    if let Some(tx) = app_state.shutdown_tx.lock().ok().and_then(|mut g| g.take()) {
+pub async fn stop_server(state: tauri::State<'_, AppState>) -> Result<(), String> {
+    if let Some(tx) = lock_or_recover(&state.shutdown_tx).take() {
         let _ = tx.send(());
     }
-    if let Some(handle) = app_state.server_handle.lock().ok().and_then(|mut g| g.take()) {
-        drop(handle);
+    let handle = lock_or_recover(&state.server_handle).take();
+    if let Some(handle) = handle {
+        let _ = handle.await;
         log::info!("Server stopped");
     }
 
     // Clear temp requests from memory
-    if let Ok(mut temp) = app_state.temp_requests.lock() {
+    {
+        let mut temp = lock_or_recover(&state.temp_requests);
         temp.clear();
         log::info!("Cleared temp requests from memory");
     }
@@ -97,21 +94,19 @@ pub async fn stop_server(state: tauri::State<'_, Mutex<AppState>>) -> Result<(),
 }
 
 #[tauri::command]
-pub fn get_server_status(state: tauri::State<'_, Mutex<AppState>>) -> Result<ServerStatus, String> {
-    let app_state = lock_or_recover(&state);
-    let running = lock_or_recover(&app_state.server_handle).is_some();
-    let port = *lock_or_recover(&app_state.server_port);
+pub fn get_server_status(state: tauri::State<'_, AppState>) -> Result<ServerStatus, String> {
+    let running = lock_or_recover(&state.server_handle).is_some();
+    let port = *lock_or_recover(&state.server_port);
 
     Ok(ServerStatus { running, port })
 }
 
 #[tauri::command]
 pub fn sync_temp_request(
-    state: tauri::State<'_, Mutex<AppState>>,
+    state: tauri::State<'_, AppState>,
     draft: TempRequest,
 ) -> Result<(), String> {
-    let app_state = lock_or_recover(&state);
-    let mut temp = app_state.temp_requests.lock().map_err(|e| e.to_string())?;
+    let mut temp = lock_or_recover(&state.temp_requests);
     let key = format!("{}:{}", draft.method.to_uppercase(), draft.path.trim_start_matches('/'));
     temp.insert(key.clone(), draft);
     log::info!("Synced temp request: {}", key);
@@ -120,11 +115,10 @@ pub fn sync_temp_request(
 
 #[tauri::command]
 pub fn remove_temp_request(
-    state: tauri::State<'_, Mutex<AppState>>,
+    state: tauri::State<'_, AppState>,
     tab_id: String,
 ) -> Result<(), String> {
-    let app_state = lock_or_recover(&state);
-    let mut temp = app_state.temp_requests.lock().map_err(|e| e.to_string())?;
+    let mut temp = lock_or_recover(&state.temp_requests);
 
     // Find and remove by tab_id
     let key_to_remove = temp.iter()

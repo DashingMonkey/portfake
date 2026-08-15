@@ -52,7 +52,7 @@ pub fn create_request(
             [collection_id],
             |row| row.get(0),
         )
-        .unwrap_or(0);
+        .map_err(|e| e.to_string())?;
 
     conn.execute(
         "INSERT INTO requests (id, collection_id, name, method, path, headers, position, enabled) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 1)",

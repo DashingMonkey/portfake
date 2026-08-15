@@ -5,7 +5,9 @@ import { useServerStore } from '../../stores/server'
 import { useTabsStore } from '../../stores/tabs'
 import { useToast } from '../../composables/useToast'
 import type { Language } from '../../i18n'
+import pkg from '../../../package.json'
 
+const appVersion = pkg.version
 const { t } = useI18n()
 const visible = defineModel<boolean>('visible')
 const settingsStore = useSettingsStore()
@@ -19,14 +21,16 @@ const languages: { value: Language; label: string }[] = [
 ]
 
 async function handleSave() {
+  if (settingsStore.serverPort < 1 || settingsStore.serverPort > 65535) {
+    show({ message: t('settings.portRangeError'), type: 'error' })
+    return
+  }
+
   settingsStore.saveSettings()
   visible.value = false
 
   if (serverStore.isRunning) {
-    const origins = settingsStore.corsOrigins
-      .split(',')
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0)
+    const origins = settingsStore.parsedCorsOrigins
     try {
       await serverStore.stopServer()
       serverStore.port = settingsStore.serverPort
@@ -53,8 +57,13 @@ async function handleSave() {
         v-if="visible"
         class="fixed inset-0 z-90 flex items-center justify-center bg-black/40 backdrop-blur-xs"
         @click.self="visible = false"
+        @keydown.esc="visible = false"
       >
-        <div class="w-[400px] bg-surface-base border border-border-default rounded-xl shadow-2xl overflow-hidden">
+        <div
+          role="dialog"
+          aria-modal="true"
+          class="w-[400px] bg-surface-base border border-border-default rounded-xl shadow-2xl overflow-hidden"
+        >
           <!-- Header -->
           <div class="px-5 py-4 border-b border-border-default flex items-center justify-between">
             <h2 class="text-sm font-semibold text-text-primary">{{ t('settings.title') }}</h2>
@@ -117,7 +126,8 @@ async function handleSave() {
           </div>
 
           <!-- Footer -->
-          <div class="px-5 py-3 border-t border-border-default flex justify-end">
+          <div class="px-5 py-3 border-t border-border-default flex items-center justify-between">
+            <span class="text-xs text-text-muted">v{{ appVersion }}</span>
             <button
               @click="handleSave"
               class="px-4 py-1.5 text-xs font-semibold bg-accent hover:bg-cyan-400 text-white rounded-sm transition-colors"

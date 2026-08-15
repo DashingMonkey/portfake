@@ -88,8 +88,8 @@ async function syncSidebarWithActiveTab() {
 
   collectionsStore.selectedRequestId = activeTab.requestId
 
+  // Check if request is already in loaded requests
   let request = collectionsStore.requests.find(r => r.id === activeTab.requestId)
-
   if (request) {
     if (!collectionsStore.expandedCollectionIds.has(request.collection_id)) {
       await collectionsStore.toggleExpand(request.collection_id)
@@ -97,21 +97,11 @@ async function syncSidebarWithActiveTab() {
     return
   }
 
-  // Search in already expanded collections
-  for (const collId of Array.from(collectionsStore.expandedCollectionIds)) {
-    await collectionsStore.loadRequests(collId)
-    request = collectionsStore.requests.find(r => r.id === activeTab.requestId)
-    if (request) break
-  }
-
-  // Search in collapsed collections if not found
-  if (!request) {
-    for (const coll of collectionsStore.collections) {
-      if (collectionsStore.expandedCollectionIds.has(coll.id)) continue
-      await collectionsStore.toggleExpand(coll.id)
-      request = collectionsStore.requests.find(r => r.id === activeTab.requestId)
-      if (request) break
-    }
+  // Use draft state to find collection_id without expanding all collections
+  const draft = tabsStore.drafts.find(d => d.tabId === activeTab.id)
+  const collectionId = draft?.state.collectionId
+  if (collectionId && !collectionsStore.expandedCollectionIds.has(collectionId)) {
+    await collectionsStore.toggleExpand(collectionId)
   }
 }
 
@@ -421,8 +411,8 @@ onMounted(async () => {
                 <div class="text-[10px] text-text-muted uppercase tracking-wide mb-0.5">{{ t('logs.headers') }}</div>
                 <div class="space-y-0.5">
                   <div
-                    v-for="[k, v] in log.headers"
-                    :key="k"
+                    v-for="([k, v], i) in log.headers"
+                    :key="i"
                     class="flex gap-1.5 text-[10px]"
                   >
                     <span class="text-text-secondary font-mono shrink-0">{{ k }}:</span>

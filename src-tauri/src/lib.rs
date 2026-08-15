@@ -24,8 +24,8 @@ pub struct AppState {
     pub server_handle: Mutex<Option<tokio::task::JoinHandle<()>>>,
     pub shutdown_tx: Mutex<Option<tokio::sync::oneshot::Sender<()>>>,
     pub server_port: Mutex<u16>,
-    /// Temporary requests stored in memory (key: "METHOD:/path")
-    pub temp_requests: Mutex<HashMap<String, models::TempRequest>>,
+    /// Temporary requests stored in memory (key: "METHOD:/path"), shared with running server
+    pub temp_requests: Arc<Mutex<HashMap<String, models::TempRequest>>>,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -61,7 +61,7 @@ pub fn run() {
                 .and_then(|p| p.parent().map(|p| p.to_path_buf()))
                 .unwrap_or_else(|| {
                     app.path().executable_dir().unwrap_or_else(|_| {
-                        std::env::current_dir().expect("Failed to get current directory")
+                        std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."))
                     })
                 });
 
@@ -74,9 +74,9 @@ pub fn run() {
                 server_handle: Mutex::new(None),
                 shutdown_tx: Mutex::new(None),
                 server_port: Mutex::new(3210),
-                temp_requests: Mutex::new(HashMap::new()),
+                temp_requests: Arc::new(Mutex::new(HashMap::new())),
             };
-            app.manage(Mutex::new(state));
+            app.manage(state);
 
             log::info!("Portfake setup complete");
             Ok(())

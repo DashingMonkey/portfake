@@ -37,11 +37,10 @@ const bgClass = {
 </script>
 
 <template>
-  <Teleport to="body">
-    <div
-      class="fixed bottom-4 right-4 z-100 transition-all duration-200"
-      :class="visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'"
-    >
+  <div
+    class="transition-all duration-200"
+    :class="visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'"
+  >
       <div
         class="flex items-center gap-2 px-4 py-2.5 rounded-lg border text-sm shadow-lg min-w-[240px]"
         :class="bgClass[type]"
@@ -73,5 +72,4 @@ const bgClass = {
         <span class="text-text-primary">{{ message }}</span>
       </div>
     </div>
-  </Teleport>
 </template>

@@ -138,8 +138,9 @@ fn generate_default_example() -> GeneratedExample {
 
 fn extract_path_segment(url: &str) -> String {
     if url.starts_with("http://") || url.starts_with("https://") {
-        if let Some(pos) = url[8..].find('/') {
-            let path = &url[8 + pos..];
+        let after_scheme = url.strip_prefix("http://").or_else(|| url.strip_prefix("https://")).unwrap_or(url);
+        if let Some(pos) = after_scheme.find('/') {
+            let path = &after_scheme[pos..];
             let segments: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
             return segments.last().unwrap_or(&"").to_string();
         }

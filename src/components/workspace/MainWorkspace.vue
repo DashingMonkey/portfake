@@ -48,8 +48,8 @@ onMounted(async () => {
   await collectionsStore.loadCollections()
   serverStore.loadStatus()
   tabsStore.loadTabs()
-  const savedWidth = localStorage.getItem(SIDEBAR_WIDTH_KEY)
-  if (savedWidth) sidebarWidth.value = parseInt(savedWidth, 10)
+  const savedWidth = parseInt(localStorage.getItem(SIDEBAR_WIDTH_KEY) || '', 10)
+  if (!isNaN(savedWidth) && savedWidth >= 160) sidebarWidth.value = savedWidth
 })
 
 onUnmounted(() => {

@@ -60,7 +60,7 @@ pub fn create_example(params: CreateExampleParams) -> Result<Example, String> {
             [params.request_id.as_str()],
             |row| row.get(0),
         )
-        .unwrap_or(0);
+        .map_err(|e| e.to_string())?;
 
     conn.execute(
         "INSERT INTO examples (id, request_id, name, is_default, status_code, headers, body, body_type, delay_ms, match_rules, order_index) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
@@ -93,4 +93,24 @@ pub fn create_example(params: CreateExampleParams) -> Result<Example, String> {
         match_rules: "[]".to_string(),
         order_index: max_idx,
     })
+}
+
+pub fn update_example(
+    db: &Arc<Database>,
+    example_id: &str,
+    status_code: u16,
+    headers: &str,
+    body: &str,
+    body_type: &str,
+    delay_ms: Option<i64>,
+) -> Result<(), String> {
+    let conn = db.connection().lock().map_err(|e| e.to_string())?;
+    let affected = conn.execute(
+        "UPDATE examples SET status_code = ?1, headers = ?2, body = ?3, body_type = ?4, delay_ms = ?5 WHERE id = ?6",
+        params![status_code as i32, headers, body, body_type, delay_ms, example_id],
+    ).map_err(|e| e.to_string())?;
+    if affected == 0 {
+        return Err(format!("Example with id '{}' not found", example_id));
+    }
+    Ok(())
 }

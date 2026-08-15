@@ -10,6 +10,11 @@ pub fn run(conn: &Connection) -> Result<()> {
 
     conn.execute(INIT_SERVER_CONFIG, [])?;
 
+    // Create indexes for performance
+    conn.execute(CREATE_IDX_REQUESTS_METHOD_PATH, [])?;
+    conn.execute(CREATE_IDX_REQUESTS_COLLECTION, [])?;
+    conn.execute(CREATE_IDX_EXAMPLES_REQUEST, [])?;
+
     Ok(())
 }
 
@@ -69,3 +74,12 @@ CREATE TABLE IF NOT EXISTS server_config (
 const INIT_SERVER_CONFIG: &str = r#"
 INSERT OR IGNORE INTO server_config (id, port, enabled, cors_origins) VALUES (1, 3210, 0, '["*"]')
 "#;
+
+const CREATE_IDX_REQUESTS_METHOD_PATH: &str =
+    "CREATE INDEX IF NOT EXISTS idx_requests_method_path ON requests(method, path)";
+
+const CREATE_IDX_REQUESTS_COLLECTION: &str =
+    "CREATE INDEX IF NOT EXISTS idx_requests_collection ON requests(collection_id)";
+
+const CREATE_IDX_EXAMPLES_REQUEST: &str =
+    "CREATE INDEX IF NOT EXISTS idx_examples_request ON examples(request_id)";

@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, watch } from 'vue'
+import { ref, watch, computed } from 'vue'
 import type { Theme } from './types'
 import i18n from '../i18n'
 import type { Language } from '../i18n'
@@ -17,6 +17,12 @@ export const useSettingsStore = defineStore('settings', () => {
   const theme = ref<Theme>('light')
   const serverPort = ref(3210)
   const corsOrigins = ref('*')
+
+  /** Parsed CORS origins array, defaults to ['*'] if empty */
+  const parsedCorsOrigins = computed(() => {
+    const origins = corsOrigins.value.split(',').map(s => s.trim()).filter(s => s.length > 0)
+    return origins.length > 0 ? origins : ['*']
+  })
   const language = ref<Language>(
     (i18n.global.locale as unknown as { value: string }).value.startsWith('zh') ? 'zh' : 'en'
   )
@@ -84,6 +90,7 @@ export const useSettingsStore = defineStore('settings', () => {
     theme,
     serverPort,
     corsOrigins,
+    parsedCorsOrigins,
     language,
     loadSettings,
     toggleTheme,

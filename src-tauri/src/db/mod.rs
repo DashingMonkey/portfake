@@ -4,13 +4,12 @@ pub mod requests;
 pub mod schema;
 
 use rusqlite::{Connection, Result};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Mutex;
 
 #[derive(Debug)]
 pub struct Database {
     conn: Mutex<Connection>,
-    path: Mutex<PathBuf>,
 }
 
 impl Database {
@@ -18,7 +17,6 @@ impl Database {
         let conn = Connection::open(path.as_ref())?;
         let db = Database {
             conn: Mutex::new(conn),
-            path: Mutex::new(path.as_ref().to_path_buf()),
         };
         db.init()?;
         Ok(db)
@@ -28,12 +26,8 @@ impl Database {
         &self.conn
     }
 
-    pub fn path(&self) -> std::sync::MutexGuard<'_, PathBuf> {
-        self.path.lock().unwrap()
-    }
-
     fn init(&self) -> Result<()> {
-        let conn = self.conn.lock().unwrap();
+        let conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
         schema::run(&conn)?;
         Ok(())
     }

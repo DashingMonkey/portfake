@@ -92,7 +92,8 @@ async fn handle_request(
     // Check for x-mock-example header (only used for db requests, not temp)
     let example_override = headers
         .get("x-mock-example")
-        .and_then(|v| v.to_str().ok());
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
 
     // Read request body for logging
     let body_bytes = match axum::body::to_bytes(request.into_body(), usize::MAX).await {
@@ -101,8 +102,15 @@ async fn handle_request(
     };
     let req_body = String::from_utf8_lossy(&body_bytes).to_string();
 
-    // Try to find matching request from database first (priority)
-    let db_match = find_matching_db_request(&state.db, &method, &path);
+    // Run DB matching in a blocking thread to avoid blocking the async runtime
+    let db_clone = state.db.clone();
+    let method_clone = method.clone();
+    let path_clone = path.clone();
+    let db_match = tokio::task::spawn_blocking(move || {
+        find_matching_db_request(&db_clone, &method_clone, &path_clone)
+    })
+    .await
+    .unwrap_or(DbMatchResult::NoMatch);
 
     let response = match db_match {
         DbMatchResult::Matched(request_id, stored_path) => {
@@ -110,10 +118,18 @@ async fn handle_request(
             // Database match - get example
             let path_params = extract_path_params(&stored_path, &path);
 
-            let example = match example_override {
-                Some(name) => find_example_by_name(&state.db, &request_id, name),
-                None => find_default_example(&state.db, &request_id),
-            };
+            // Run example lookup in a blocking thread
+            let db_clone = state.db.clone();
+            let request_id_clone = request_id.clone();
+            let override_clone = example_override.clone();
+            let example = tokio::task::spawn_blocking(move || {
+                match override_clone.as_deref() {
+                    Some(name) => find_example_by_name(&db_clone, &request_id_clone, name),
+                    None => find_default_example(&db_clone, &request_id_clone),
+                }
+            })
+            .await
+            .unwrap_or(None);
 
             match example {
                 Some((sc, body, response_headers)) => {

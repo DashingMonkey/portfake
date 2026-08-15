@@ -5,6 +5,7 @@ import MainWorkspace from './components/workspace/MainWorkspace.vue'
 import SettingsDialog from './components/common/SettingsDialog.vue'
 import { useSettingsStore } from './stores/settings'
 import { useServerStore } from './stores/server'
+import { logger } from './lib/logger'
 
 const settingsStore = useSettingsStore()
 const serverStore = useServerStore()
@@ -13,10 +14,15 @@ const showSettings = ref(false)
 
 /** Initialize app state: load settings, configure server port, and set up event listeners */
 async function initializeApp() {
-  settingsStore.loadSettings()
-  serverStore.port = settingsStore.serverPort
-  await serverStore.setupListener()
-  isInitializing.value = false
+  try {
+    settingsStore.loadSettings()
+    serverStore.port = settingsStore.serverPort
+    await serverStore.setupListener()
+  } catch (e) {
+    logger.error('Initialization failed:', e)
+  } finally {
+    isInitializing.value = false
+  }
 }
 
 onMounted(initializeApp)

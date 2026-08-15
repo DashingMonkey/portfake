@@ -48,6 +48,7 @@ export interface Example {
 
 export interface Tab {
   id: string
+  /** Empty string means the tab is not bound to a saved request */
   requestId: string
   method: string
   title: string
